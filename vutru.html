@@ -1,0 +1,256 @@
+<!-- ===== VŨ TRỤ TỰ DO KHÔNG CẦN ĐĂNG NHẬP ===== -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vũ trụ của người đẹp</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    .universe-container {
+      background: linear-gradient(135deg, #0c0c35 0%, #1a1a4a 50%, #2a2a6a 100%);
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+    .universe-container canvas {
+      display: block;
+      cursor: grab;
+    }
+    .universe-container canvas:active {
+      cursor: grabbing;
+    }
+    .loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 18px;
+      z-index: 1001;
+    }
+    .error-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff6b6b;
+      font-size: 16px;
+      z-index: 1001;
+      background: rgba(0,0,0,0.8);
+      padding: 20px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="universePage" class="universe-container">
+    <div id="loadingIndicator" class="loading">Đang tải vũ trụ của người đẹp...</div>
+    <div id="errorIndicator" class="error-message" style="display: none;"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+  <script>
+    let scene, camera, renderer, planet, rings = [], stars, imageSprites = [], imageGroup;
+    let animationId;
+
+    const classImages = [];
+    for (let i = 1; i <= 500; i++) {
+      classImages.push(`image/${i}.jpg`, `image/${i}.jpeg`);
+    }
+
+    window.addEventListener('load', () => {
+      initUniverse();
+    });
+
+    function initUniverse() {
+      const container = document.getElementById("universePage");
+      const loadingIndicator = document.getElementById("loadingIndicator");
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x0a0a2a, 1);
+      container.appendChild(renderer.domElement);
+
+      createStars();
+      createPlanet();
+      createOrbitingRings();
+
+      imageGroup = new THREE.Group();
+      scene.add(imageGroup);
+
+      camera.position.set(0, 10, 30);
+      camera.lookAt(0, 0, 0);
+      initSimpleControls(camera, renderer);
+
+      loadingIndicator.style.display = 'none';
+      animate();
+      startImageCycling();
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function createStars() {
+      const starsGeometry = new THREE.BufferGeometry();
+      const starsCount = 2000;
+      const positions = new Float32Array(starsCount * 3);
+      const colors = new Float32Array(starsCount * 3);
+
+      for (let i = 0; i < starsCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 200;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 200;
+
+        colors[i * 3] = 0.5 + Math.random() * 0.5;
+        colors[i * 3 + 1] = 0.3 + Math.random() * 0.4;
+        colors[i * 3 + 2] = 0.8 + Math.random() * 0.2;
+      }
+
+      starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const starsMaterial = new THREE.PointsMaterial({
+        size: 0.5,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8
+      });
+
+      stars = new THREE.Points(starsGeometry, starsMaterial);
+      scene.add(stars);
+    }
+
+    function createPlanet() {
+      const geometry = new THREE.SphereGeometry(3, 32, 32);
+      const material = new THREE.MeshPhongMaterial({ color: 0x8844ff, emissive: 0x221144, shininess: 100, transparent: true, opacity: 0.9 });
+      planet = new THREE.Mesh(geometry, material);
+      scene.add(planet);
+      scene.add(new THREE.AmbientLight(0x404040, 0.6));
+      const pointLight = new THREE.PointLight(0x8844ff, 1, 100);
+      pointLight.position.set(10, 10, 10);
+      scene.add(pointLight);
+    }
+
+    function createOrbitingRings() {
+      const ring1 = new THREE.Mesh(new THREE.RingGeometry(8, 8.2, 64), ringMaterial());
+      const ring2 = new THREE.Mesh(new THREE.RingGeometry(12, 12.3, 64), ringMaterial());
+      const ring3 = new THREE.Mesh(new THREE.RingGeometry(16, 16.4, 64), ringMaterial());
+      [ring1, ring2, ring3].forEach((r, i) => {
+        r.rotation.x = Math.PI / 2 + (i - 1) * 0.1;
+        rings.push(r);
+        scene.add(r);
+      });
+    }
+
+    function ringMaterial() {
+      return new THREE.MeshBasicMaterial({ color: 0x6644ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    }
+
+    function startImageCycling() {
+      let index = 0;
+      setInterval(async () => {
+        imageSprites.forEach(sprite => {
+          imageGroup.remove(sprite);
+          sprite.material.dispose();
+        });
+        imageSprites = [];
+        const imagesToShow = 12;
+        const sprites = await Promise.all(
+          Array.from({ length: imagesToShow }, (_, i) => createImageSprite(classImages[(index + i) % classImages.length]))
+        );
+        sprites.forEach((sprite, i) => {
+          const angle = (i / imagesToShow) * Math.PI * 2;
+          const radius = 20;
+          sprite.position.set(Math.cos(angle) * radius, Math.sin(i * 0.5) * 2, Math.sin(angle) * radius);
+          imageGroup.add(sprite);
+          imageSprites.push(sprite);
+        });
+        index = (index + imagesToShow) % classImages.length;
+      }, 8000);
+    }
+
+    function createImageSprite(url) {
+      return new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const texture = new THREE.Texture(img);
+          texture.needsUpdate = true;
+          const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
+          const sprite = new THREE.Sprite(material);
+          sprite.scale.set(2, 2, 1);
+          resolve(sprite);
+        };
+        img.onerror = () => resolve(new THREE.Sprite(new THREE.SpriteMaterial({ opacity: 0 })));
+        img.src = url;
+      });
+    }
+
+    function animate() {
+      TWEEN.update();
+      animationId = requestAnimationFrame(animate);
+      if (planet) {
+        planet.rotation.y += 0.01;
+      }
+      rings.forEach((ring, i) => {
+        ring.rotation.z += 0.002 * (i + 1);
+      });
+      if (imageGroup) imageGroup.rotation.y += 0.003;
+      if (stars) {
+        stars.rotation.y += 0.0008;
+        stars.rotation.x += 0.0005;
+      }
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function initSimpleControls(camera, renderer) {
+      const canvas = renderer.domElement;
+      let isMouseDown = false, mouseX = 0, mouseY = 0, targetX = 0, targetY = 0, currentX = 0, currentY = 0;
+      canvas.addEventListener('mousedown', e => { isMouseDown = true; mouseX = e.clientX; mouseY = e.clientY; });
+      canvas.addEventListener('mousemove', e => {
+        if (!isMouseDown) return;
+        const deltaX = e.clientX - mouseX;
+        const deltaY = e.clientY - mouseY;
+        targetX += deltaX * 0.01;
+        targetY += deltaY * 0.01;
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+      });
+      canvas.addEventListener('mouseup', () => { isMouseDown = false; });
+      canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const scale = e.deltaY > 0 ? 1.1 : 0.9;
+        camera.position.multiplyScalar(scale);
+        const d = camera.position.length();
+        if (d < 10) camera.position.normalize().multiplyScalar(10);
+        else if (d > 100) camera.position.normalize().multiplyScalar(100);
+      });
+      (function updateCamera() {
+        currentX += (targetX - currentX) * 0.05;
+        currentY += (targetY - currentY) * 0.05;
+        currentY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, currentY));
+        const d = camera.position.length();
+        camera.position.x = d * Math.cos(currentY) * Math.cos(currentX);
+        camera.position.y = d * Math.sin(currentY);
+        camera.position.z = d * Math.cos(currentY) * Math.sin(currentX);
+        camera.lookAt(0, 0, 0);
+        requestAnimationFrame(updateCamera);
+      })();
+    }
+  </script>
+</body>
+</html>
